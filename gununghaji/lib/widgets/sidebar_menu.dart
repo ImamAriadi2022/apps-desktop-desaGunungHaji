@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../screens/data_penduduk_screen.dart';
-import '../screens/dashboard_screen.dart';
+import '../screens/data_penduduk_screen_wrapper.dart';
+import '../screens/dashboard_screen_wrapper.dart';
 import '../screens/bantuan_screen.dart';
 
 class SidebarMenu extends StatelessWidget {
@@ -16,18 +16,18 @@ class SidebarMenu extends StatelessWidget {
           ListTile(
             title: Text('Dashboard'),
             onTap: () {
-              Navigator.push(
+              Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (context) => DashboardScreen()),
+                MaterialPageRoute(builder: (context) => DashboardScreenWrapper()),
               );
             },
           ),
           ListTile(
             title: Text('Data Penduduk'),
             onTap: () {
-              Navigator.push(
+              Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (context) => DataPendudukScreen()),
+                MaterialPageRoute(builder: (context) => DataPendudukScreenWrapper()),
               );
             },
           ),

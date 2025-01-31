@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import '../providers/data_penduduk_provider.dart';
-import 'package:provider/provider.dart';
 
 class SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      decoration: InputDecoration(
-        labelText: 'Cari berdasarkan NIK',
-        suffixIcon: Icon(Icons.search),
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: TextField(
+        decoration: InputDecoration(
+          labelText: 'Cari',
+          border: OutlineInputBorder(),
+        ),
+        onChanged: (value) {
+          // Implement search functionality
+        },
       ),
-      onChanged: (query) {
-        context.read<DataPendudukProvider>().filterData(query);
-      },
     );
   }
 }

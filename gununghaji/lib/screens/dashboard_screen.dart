@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../widgets/search_bar.dart';
+import '../widgets/search_bar.dart' as custom;
 import '../providers/data_penduduk_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -9,11 +9,20 @@ class DashboardScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SearchBar(),
-        Consumer<DataPendudukProvider>(
-          builder: (context, provider, child) {
-            return Expanded(
-              child: ListView.builder(
+        custom.SearchBar(),
+        TextField(
+          decoration: InputDecoration(
+            labelText: 'Cari berdasarkan NIK',
+          ),
+          onChanged: (value) {
+            Provider.of<DataPendudukProvider>(context, listen: false)
+                .filterData(value);
+          },
+        ),
+        Expanded(
+          child: Consumer<DataPendudukProvider>(
+            builder: (context, provider, child) {
+              return ListView.builder(
                 itemCount: provider.filteredData.length,
                 itemBuilder: (context, index) {
                   final data = provider.filteredData[index];
@@ -22,9 +31,9 @@ class DashboardScreen extends StatelessWidget {
                     subtitle: Text('NIK: ${data.nik}'),
                   );
                 },
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ],
     );
