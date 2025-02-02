@@ -1,7 +1,7 @@
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:process_run/shell.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart';
 
 void main() {
   runApp(MyApp());
@@ -11,145 +11,316 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Excel Manager',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: ExcelManager(),
+      home: HomeScreen(),
     );
   }
 }
 
-class ExcelManager extends StatefulWidget {
+class HomeScreen extends StatefulWidget {
   @override
-  _ExcelManagerState createState() => _ExcelManagerState();
+  _HomeScreenState createState() => _HomeScreenState();
 }
 
-class _ExcelManagerState extends State<ExcelManager> {
-  var excel;
-  List<String> sheetNames = [];
-  var sheet;
-  Map<String, String> data = {};
+class _HomeScreenState extends State<HomeScreen> {
+  List<Map<String, dynamic>> _data = [];
+  String _filePath = '';
 
-  // Membuka dan membaca file Excel
-  Future<void> openExcel() async {
-    var result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx']);
+  void _importFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+    );
+
     if (result != null) {
-      var bytes = result.files.single.bytes;
-      excel = Excel.decodeBytes(bytes!);
+      String filePath = result.files.single.path!;
+      var shell = Shell();
+      var output = await shell.run('python lib/app.py read "$filePath"');
       setState(() {
-        sheetNames = excel.tables.keys.toList();  // Menyimpan nama sheet
-        sheet = excel.tables[sheetNames[0]];     // Memilih sheet pertama secara default
-        extractDataFromSheet();  // Menyaring data pertama dari sheet
+        _filePath = filePath;
+        _data = List<Map<String, dynamic>>.from(json.decode(output.outText));
       });
+    } else {
+      print('No file selected');
     }
   }
 
-  // Fungsi untuk mengekstrak data dari sheet yang dipilih
-  void extractDataFromSheet() {
-    var row = sheet?.rows[3];  // Mengakses baris ke-4 (indeks 3)
-    if (row != null) {
-      data = {
-        'Nomor': row[0]?.toString() ?? '',
-        'Nomor KK': row[1]?.toString() ?? '',
-        'NIK': row[2]?.toString() ?? '',
-        'Nama': row[3]?.toString() ?? '',
-        'Kelamin': row[4]?.toString() ?? '',
-        'Tanggal Lahir': row[6]?.toString() ?? '',
-        'RT/RW': row[7]?.toString() ?? '',
-        'Agama': row[8]?.toString() ?? '',
-        'Pendidikan Terakhir': row[9]?.toString() ?? '',
-        'Pekerjaan': row[10]?.toString() ?? '',
-        'Status': row[11]?.toString() ?? '',
-        'Status di Keluarga': row[12]?.toString() ?? '',
-        'Nama Ayah': row[13]?.toString() ?? '',
-        'Nama Ibu': row[14]?.toString() ?? '',
-        'Umur Tahun': row[15]?.toString() ?? '',
-        'Umur Bulan': row[16]?.toString() ?? '',
-        'Umur Hari': row[17]?.toString() ?? '',
-      };
-    }
+  void _searchData(String key, String value) async {
+    var shell = Shell();
+    var output = await shell.run('python lib/app.py search "$_filePath" "$key" "$value"');
+    setState(() {
+      _data = List<Map<String, dynamic>>.from(json.decode(output.outText));
+    });
   }
 
-  // Menyimpan data kembali ke file Excel
-  Future<void> saveExcel() async {
-    // Logika untuk menyimpan data kembali ke file Excel (implementasi bisa lebih kompleks tergantung kebutuhan)
-    print('Data telah disimpan');
+  void _addData(Map<String, dynamic> newData) async {
+    var shell = Shell();
+    await shell.run('python lib/app.py add "$_filePath" "${json.encode(newData)}"');
+    _importFile(); // Refresh data
   }
 
-  // Menampilkan data dalam form untuk edit
-  Widget buildDataDisplay() {
-    return Column(
-      children: data.entries.map((entry) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Row(
-            children: [
-              Text(entry.key, style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  initialValue: entry.value,
-                  onChanged: (value) {
-                    setState(() {
-                      data[entry.key] = value;
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
+  void _updateData(String key, String value, Map<String, dynamic> updatedData) async {
+    var shell = Shell();
+    await shell.run('python lib/app.py update "$_filePath" "$key" "$value" "${json.encode(updatedData)}"');
+    _importFile(); // Refresh data
   }
 
-  // Menampilkan sheet picker untuk memilih sheet yang ingin dibuka
-  Widget buildSheetPicker() {
-    return DropdownButton<String>(
-      value: sheetNames.isNotEmpty ? sheetNames[0] : null,
-      items: sheetNames.map((sheetName) {
-        return DropdownMenuItem<String>(
-          value: sheetName,
-          child: Text(sheetName),
-        );
-      }).toList(),
-      onChanged: (value) {
-        setState(() {
-          sheet = excel.tables[value];
-          extractDataFromSheet();
-        });
-      },
-      hint: Text("Pilih Sheet"),
-    );
+  void _deleteData(String key, String value) async {
+    var shell = Shell();
+    await shell.run('python lib/app.py delete "$_filePath" "$key" "$value"');
+    _importFile(); // Refresh data
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Excel Manager'),
+        title: Text('Excel Data Management'),
         actions: [
           IconButton(
-            icon: Icon(Icons.save),
-            onPressed: saveExcel,
+            icon: Icon(Icons.search),
+            onPressed: () {
+              showSearch(
+                context: context,
+                delegate: DataSearch(_filePath, _searchData),
+              );
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          ElevatedButton(
+            onPressed: _importFile,
+            child: Text('Import Excel File'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AddEditScreen(
+                    onSave: _addData,
+                  ),
+                ),
+              );
+            },
+            child: Text('Add Data'),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _data.length,
+              itemBuilder: (context, index) {
+                var item = _data[index];
+                return Card(
+                  elevation: 5,
+                  margin: EdgeInsets.symmetric(vertical: 10, horizontal: 15),
+                  child: ListTile(
+                    title: Text(item['NAMA'] ?? 'No Name'),
+                    subtitle: Text('NIK: ${item['NIK'] ?? 'No NIK'}'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DetailScreen(
+                            data: item,
+                            deleteData: _deleteData,
+                            updateData: _updateData,
+                          ),
+                        ),
+                      );
+                    },
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.edit),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => AddEditScreen(
+                                  data: item,
+                                  onSave: (updatedData) {
+                                    _updateData('NIK', item['NIK'], updatedData);
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete),
+                          onPressed: () {
+                            _deleteData('NIK', item['NIK']);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DataSearch extends SearchDelegate {
+  final String filePath;
+  final Function(String, String) searchData;
+
+  DataSearch(this.filePath, this.searchData);
+
+  @override
+  List<Widget> buildActions(BuildContext context) {
+    return [
+      IconButton(
+        icon: Icon(Icons.clear),
+        onPressed: () {
+          query = '';
+        },
+      ),
+    ];
+  }
+
+  @override
+  Widget buildLeading(BuildContext context) {
+    return IconButton(
+      icon: Icon(Icons.arrow_back),
+      onPressed: () {
+        close(context, null);
+      },
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    searchData('NAMA', query);
+    return Container();
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return Container();
+  }
+}
+
+class DetailScreen extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final Function(String, String) deleteData;
+  final Function(String, String, Map<String, dynamic>) updateData;
+
+  DetailScreen({required this.data, required this.deleteData, required this.updateData});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Detail Profil'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.edit),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AddEditScreen(
+                    data: data,
+                    onSave: (updatedData) {
+                      updateData('NIK', data['NIK'], updatedData);
+                      Navigator.pop(context);
+                      Navigator.pop(context); // Close DetailScreen
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () {
+              deleteData('NIK', data['NIK']);
+              Navigator.pop(context); // Close DetailScreen
+            },
           ),
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            ElevatedButton(
-              onPressed: openExcel,
-              child: Text('Buka File Excel'),
-            ),
-            if (sheetNames.isNotEmpty) ...[
-              buildSheetPicker(),
-              SizedBox(height: 20),
-              buildDataDisplay(),
-            ]
-          ],
+        child: ListView(
+          children: data.entries.map((entry) {
+            return ListTile(
+              title: Text(entry.key),
+              subtitle: Text(entry.value ?? 'N/A'),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class AddEditScreen extends StatefulWidget {
+  final Map<String, dynamic>? data;
+  final Function(Map<String, dynamic>) onSave;
+
+  AddEditScreen({this.data, required this.onSave});
+
+  @override
+  _AddEditScreenState createState() => _AddEditScreenState();
+}
+
+class _AddEditScreenState extends State<AddEditScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late Map<String, dynamic> _formData;
+
+  @override
+  void initState() {
+    super.initState();
+    _formData = widget.data ?? {};
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.data == null ? 'Add Data' : 'Edit Data'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+              TextFormField(
+                initialValue: _formData['NAMA'],
+                decoration: InputDecoration(labelText: 'Nama'),
+                onSaved: (value) {
+                  _formData['NAMA'] = value;
+                },
+              ),
+              TextFormField(
+                initialValue: _formData['NIK'],
+                decoration: InputDecoration(labelText: 'NIK'),
+                onSaved: (value) {
+                  _formData['NIK'] = value;
+                },
+              ),
+              // Tambahkan field lainnya sesuai kebutuhan
+              ElevatedButton(
+                onPressed: () {
+                  if (_formKey.currentState!.validate()) {
+                    _formKey.currentState!.save();
+                    widget.onSave(_formData);
+                    Navigator.pop(context);
+                  }
+                },
+                child: Text('Save'),
+              ),
+            ],
+          ),
         ),
       ),
     );
